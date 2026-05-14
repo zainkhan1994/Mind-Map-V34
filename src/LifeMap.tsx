@@ -1,0 +1,202 @@
+import React, { useMemo, useState } from "react";
+import { rawNodes } from "./data";
+
+function ChevronDown({ size = 12 }) {
+  return <span style={{ fontSize: size, lineHeight: 1 }}>▼</span>;
+}
+
+function ChevronRight({ size = 12 }) {
+  return <span style={{ fontSize: size, lineHeight: 1 }}>▶</span>;
+}
+
+function NetworkIcon() {
+  return <span className="inline mr-1">◇</span>;
+}
+
+function CalendarIcon() {
+  return <span className="inline mr-1">□</span>;
+}
+
+function ZoomInIcon() {
+  return <span className="inline mr-1">🔍+</span>;
+}
+
+function ZoomOutIcon() {
+  return <span className="inline mr-1">🔍−</span>;
+}
+
+const palette: Record<string, string> = {
+  black: "bg-black text-white border-black",
+  red: "bg-red-500 text-white border-red-500",
+  green: "bg-green-800 text-white border-green-800",
+  yellow: "bg-yellow-300 text-black border-yellow-300",
+  blue: "bg-blue-600 text-white border-blue-600",
+  purple: "bg-purple-600 text-white border-purple-600",
+  default: "bg-black text-white border-black",
+};
+
+interface TreeNode {
+  uid: string;
+  id: number;
+  name: string;
+  description: string;
+  type: "folder" | "file";
+  parentUid: string | null;
+  color?: string;
+  children: TreeNode[];
+}
+
+function buildTree(nodes: any[]): TreeNode[] {
+  const map = new Map(nodes.map((n) => [n.uid, { ...n, children: [] }]));
+  const roots: TreeNode[] = [];
+  map.forEach((node) => {
+    if (node.parentUid === null || !map.has(node.parentUid)) roots.push(node);
+    else map.get(node.parentUid).children.push(node);
+  });
+  return roots;
+}
+
+function collectIds(node: TreeNode): string[] {
+  return [node.uid, ...node.children.flatMap(collectIds)];
+}
+
+interface SquareNodeProps {
+  node: TreeNode;
+  depth: number;
+  collapsed: Set<string>;
+  toggle: (id: string) => void;
+  zoom: number;
+}
+
+function SquareNode({ node, depth, collapsed, toggle, zoom }: SquareNodeProps) {
+  const hasChildren = node.children.length > 0;
+  const colorClass = palette[node.color as keyof typeof palette] || palette.default;
+  
+  const scale = 1 + (zoom * 0.1);
+  
+  return (
+    <div className="flex flex-col items-center relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+      {depth > 0 && <div className="h-8 w-px bg-slate-300" />}
+      <button
+        onClick={() => hasChildren && toggle(node.uid)}
+        className={`min-w-[86px] min-h-[56px] rounded-lg border shadow-sm px-3 py-2 text-[10px] font-bold uppercase tracking-tight flex items-center justify-center gap-1 ${colorClass} transition-all hover:shadow-lg`}
+        title={node.description}
+      >
+        {hasChildren ? collapsed.has(node.uid) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}
+        <span>{node.name}</span>
+      </button>
+      {hasChildren && !collapsed.has(node.uid) && (
+        <div className="flex flex-col items-center">
+          <div className="h-8 w-px bg-slate-300" />
+          <div className="flex gap-5 items-start border-t border-slate-300 pt-0">
+            {node.children.map((child) => (
+              <SquareNode key={child.uid} node={child} depth={depth + 1} collapsed={collapsed} toggle={toggle} zoom={zoom} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function LifeNodeTogglePrototype() {
+  const roots = useMemo(() => buildTree(rawNodes), []);
+  const [collapsed, setCollapsed] = useState(new Set(rawNodes.filter((n: any) => n.parentUid !== null).map((n: any) => n.uid)));
+  const [mode, setMode] = useState<"map" | "agenda">("map");
+  const [zoom, setZoom] = useState(0);
+
+  const toggle = (id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const showOnly = (rootId: number) => {
+    const allIds = roots.flatMap(collectIds);
+    const root = roots.find((r) => r.id === rootId);
+    const keepOpen = new Set(allIds);
+    if (root) collectIds(root).forEach((id) => keepOpen.delete(id));
+    setCollapsed(keepOpen);
+  };
+
+  const handleZoomIn = () => {
+    setZoom((prev) => Math.min(prev + 1, 10));
+  };
+
+  const handleZoomOut = () => {
+    setZoom((prev) => Math.max(prev - 1, -5));
+  };
+
+  const handleResetZoom = () => {
+    setZoom(0);
+  };
+
+  return (
+    <div className="w-full min-h-screen bg-white text-slate-900 overflow-auto">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200 p-3 flex flex-wrap items-center gap-2">
+        <button onClick={() => setMode("map")} className={`rounded-lg px-3 py-2 text-sm font-semibold border transition-colors ${mode === "map" ? "bg-black text-white" : "bg-white hover:bg-slate-50"}`}>
+          <NetworkIcon /> Life Map
+        </button>
+        <button onClick={() => setMode("agenda")} className={`rounded-lg px-3 py-2 text-sm font-semibold border transition-colors ${mode === "agenda" ? "bg-black text-white" : "bg-white hover:bg-slate-50"}`}>
+          <CalendarIcon /> Everyday Agenda
+        </button>
+        
+        <div className="border-l border-slate-300 h-8 mx-1" />
+        
+        <button onClick={() => setCollapsed(new Set())} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 transition-colors">Expand All</button>
+        <button onClick={() => setCollapsed(new Set(rawNodes.map((n: any) => n.uid)))} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 transition-colors">Collapse All</button>
+        
+        <div className="border-l border-slate-300 h-8 mx-1" />
+        
+        <button onClick={() => showOnly(1)} className="rounded-lg px-3 py-2 text-sm border bg-red-100 hover:bg-red-200 transition-colors font-medium">Personal</button>
+        <button onClick={() => showOnly(500)} className="rounded-lg px-3 py-2 text-sm border bg-yellow-100 hover:bg-yellow-200 transition-colors font-medium">Health</button>
+        <button onClick={() => showOnly(600)} className="rounded-lg px-3 py-2 text-sm border bg-green-100 hover:bg-green-200 transition-colors font-medium">Work</button>
+        <button onClick={() => showOnly(700)} className="rounded-lg px-3 py-2 text-sm border bg-slate-100 hover:bg-slate-200 transition-colors font-medium">Projects</button>
+        
+        <div className="border-l border-slate-300 h-8 mx-1" />
+        
+        <button onClick={handleZoomOut} disabled={zoom <= -5} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
+          <ZoomOutIcon />
+        </button>
+        
+        <button onClick={handleResetZoom} className="rounded-lg px-2 py-2 text-xs border bg-white hover:bg-slate-50 transition-colors font-semibold min-w-[50px]" title="Reset zoom">
+          {Math.round((1 + zoom * 0.1) * 100)}%
+        </button>
+        
+        <button onClick={handleZoomIn} disabled={zoom >= 10} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
+          <ZoomInIcon />
+        </button>
+      </div>
+
+      {mode === "agenda" ? (
+        <div className="p-8 max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold mb-4">Everyday Agenda</h1>
+          <div className="grid gap-3">
+            {["Health: schedule labs", "Work: review pipeline", "Finance: check payment due dates", "Projects: update notes"].map((task) => (
+              <div key={task} className="rounded-xl border p-4 shadow-sm bg-white flex items-center justify-between hover:shadow-md transition-shadow">
+                <span className="font-semibold">{task}</span>
+                <span className="text-xs rounded-full bg-slate-100 px-2 py-1">Today</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div
+          className="min-w-full min-h-[850px] p-12 overflow-auto"
+          style={{
+            backgroundImage: "radial-gradient(#d9e2ec 1px, transparent 1px)",
+            backgroundSize: "14px 14px",
+          }}
+        >
+          <div className="flex gap-16 items-start justify-center">
+            {roots.map((root) => (
+              <SquareNode key={root.uid} node={root} depth={0} collapsed={collapsed} toggle={toggle} zoom={zoom} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
