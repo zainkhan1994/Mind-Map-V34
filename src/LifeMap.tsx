@@ -65,7 +65,6 @@ interface SquareNodeProps {
   depth: number;
   collapsed: Set<string>;
   toggle: (id: string) => void;
-  zoom: number;
   locked: Set<string>;
   toggleLock: (id: string) => void;
   onNodeRef: (uid: string, element: HTMLDivElement | null) => void;
@@ -74,16 +73,16 @@ interface SquareNodeProps {
   selectedForConnection: string | null;
 }
 
-function SquareNode({ node, depth, collapsed, toggle, zoom, locked, toggleLock, onNodeRef, drawingMode, onNodeSelect, selectedForConnection }: SquareNodeProps) {
+function SquareNode({ node, depth, collapsed, toggle, locked, toggleLock, onNodeRef, drawingMode, onNodeSelect, selectedForConnection }: SquareNodeProps) {
   const hasChildren = node.children.length > 0;
   const colorClass = palette[node.color as keyof typeof palette] || palette.default;
   const isLocked = locked.has(node.uid);
   const isSelected = selectedForConnection === node.uid;
   
-  const minWidth = 70 + zoom * 4;
-  const minHeight = 50 + zoom * 3;
-  const fontSize = 10 + zoom * 0.5;
-  const gap = 4 + zoom * 0.3;
+  const minWidth = 70;
+  const minHeight = 50;
+  const fontSize = 10;
+  const gap = 4;
   
   return (
     <div className="flex flex-col items-center relative" ref={(el) => onNodeRef(node.uid, el)}>
@@ -134,7 +133,6 @@ function SquareNode({ node, depth, collapsed, toggle, zoom, locked, toggleLock, 
                 depth={depth + 1} 
                 collapsed={collapsed} 
                 toggle={toggle} 
-                zoom={zoom}
                 locked={locked}
                 toggleLock={toggleLock}
                 onNodeRef={onNodeRef}
@@ -154,13 +152,21 @@ export default function LifeNodeTogglePrototype() {
   const roots = useMemo(() => buildTree(rawNodes), []);
   const [collapsed, setCollapsed] = useState(new Set(rawNodes.filter((n: any) => n.parentUid !== null).map((n: any) => n.uid)));
   const [mode, setMode] = useState<"map" | "agenda">("map");
-  const [zoom, setZoom] = useState(0);
+  const [zoomScale, setZoomScale] = useState(1);
   const [locked, setLocked] = useState(new Set<string>());
   const [drawingMode, setDrawingMode] = useState(false);
   const [selectedForConnection, setSelectedForConnection] = useState<string | null>(null);
   const [connections, setConnections] = useState<Array<{ from: string; to: string }>>([]);
   const nodeRefs = new Map<string, HTMLDivElement>();
   const svgRef = React.useRef<SVGSVGElement>(null);
+  const minZoom = 0.5;
+  const maxZoom = 2;
+  const zoomStep = 0.1;
+
+  const clampZoom = (value: number) => {
+    const rounded = Math.round(value * 100) / 100;
+    return Math.min(maxZoom, Math.max(minZoom, rounded));
+  };
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {
@@ -187,15 +193,22 @@ export default function LifeNodeTogglePrototype() {
   };
 
   const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 2, 20));
+    setZoomScale((prev) => clampZoom(prev + zoomStep));
   };
 
   const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 2, -10));
+    setZoomScale((prev) => clampZoom(prev - zoomStep));
   };
 
   const handleResetZoom = () => {
-    setZoom(0);
+    setZoomScale(1);
+  };
+
+  const handleWheelZoom = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    setZoomScale((prev) => clampZoom(prev + direction * zoomStep));
   };
 
   const handleNodeSelect = (uid: string) => {
@@ -250,15 +263,15 @@ export default function LifeNodeTogglePrototype() {
         
         <div className="border-l border-slate-300 h-8 mx-1" />
         
-        <button onClick={handleZoomOut} disabled={zoom <= -10} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
+        <button onClick={handleZoomOut} disabled={zoomScale <= minZoom} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
           <ZoomOutIcon />
         </button>
         
         <button onClick={handleResetZoom} className="rounded-lg px-2 py-2 text-xs border bg-white hover:bg-slate-50 transition-colors font-semibold min-w-[50px]" title="Reset zoom">
-          {Math.round(100 + zoom * 5)}%
+          {Math.round(zoomScale * 100)}%
         </button>
         
-        <button onClick={handleZoomIn} disabled={zoom >= 20} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
+        <button onClick={handleZoomIn} disabled={zoomScale >= maxZoom} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
           <ZoomInIcon />
         </button>
 
@@ -299,7 +312,7 @@ export default function LifeNodeTogglePrototype() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto relative">
+        <div className="flex-1 overflow-auto relative" onWheel={handleWheelZoom}>
           <svg
             ref={svgRef}
             className="absolute inset-0 w-full h-full pointer-events-none z-0"
@@ -355,6 +368,10 @@ export default function LifeNodeTogglePrototype() {
             style={{
               backgroundImage: "radial-gradient(#d9e2ec 1px, transparent 1px)",
               backgroundSize: "14px 14px",
+              transform: `scale(${zoomScale})`,
+              transformOrigin: "top center",
+              transition: "transform 0.2s ease",
+              willChange: "transform",
             }}
           >
             <div className="flex gap-12 items-start">
@@ -365,7 +382,6 @@ export default function LifeNodeTogglePrototype() {
                   depth={0} 
                   collapsed={collapsed} 
                   toggle={toggle} 
-                  zoom={zoom}
                   locked={locked}
                   toggleLock={toggleLock}
                   onNodeRef={(uid, el) => {
