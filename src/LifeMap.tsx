@@ -263,19 +263,19 @@ export default function LifeNodeTogglePrototype() {
         
         <div className="border-l border-slate-300 h-8 mx-1" />
         
-        <button onClick={handleZoomOut} disabled={zoomScale <= MIN_ZOOM} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
+        <button onClick={handleZoomOut} disabled={zoomScale <= MIN_ZOOM} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out" aria-describedby="zoom-hint">
           <ZoomOutIcon />
         </button>
         
-        <button onClick={handleResetZoom} className="rounded-lg px-2 py-2 text-xs border bg-white hover:bg-slate-50 transition-colors font-semibold min-w-[50px]" title="Reset zoom">
+        <button onClick={handleResetZoom} className="rounded-lg px-2 py-2 text-xs border bg-white hover:bg-slate-50 transition-colors font-semibold min-w-[50px]" title="Reset zoom" aria-describedby="zoom-hint">
           {Math.round(zoomScale * 100)}%
         </button>
         
-        <button onClick={handleZoomIn} disabled={zoomScale >= MAX_ZOOM} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
+        <button onClick={handleZoomIn} disabled={zoomScale >= MAX_ZOOM} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in" aria-describedby="zoom-hint">
           <ZoomInIcon />
         </button>
 
-        <span className="text-xs text-slate-500">Ctrl/Cmd + scroll to zoom</span>
+        <span id="zoom-hint" className="text-xs text-slate-500">Ctrl/Cmd + scroll to zoom</span>
 
         <div className="border-l border-slate-300 h-8 mx-1" />
 
