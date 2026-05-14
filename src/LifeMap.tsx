@@ -275,6 +275,8 @@ export default function LifeNodeTogglePrototype() {
           <ZoomInIcon />
         </button>
 
+        <span className="text-xs text-slate-500">Ctrl/Cmd + scroll to zoom</span>
+
         <div className="border-l border-slate-300 h-8 mx-1" />
 
         <button 
@@ -369,7 +371,7 @@ export default function LifeNodeTogglePrototype() {
               backgroundImage: "radial-gradient(#d9e2ec 1px, transparent 1px)",
               backgroundSize: "14px 14px",
               transform: `scale(${zoomScale})`,
-              transformOrigin: "top center",
+              transformOrigin: "center",
               transition: "transform 0.2s ease",
               willChange: "transform",
             }}
