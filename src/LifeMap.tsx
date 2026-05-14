@@ -66,31 +66,82 @@ interface SquareNodeProps {
   collapsed: Set<string>;
   toggle: (id: string) => void;
   zoom: number;
+  locked: Set<string>;
+  toggleLock: (id: string) => void;
+  onNodeRef: (uid: string, element: HTMLDivElement | null) => void;
+  drawingMode: boolean;
+  onNodeSelect: (uid: string) => void;
+  selectedForConnection: string | null;
 }
 
-function SquareNode({ node, depth, collapsed, toggle, zoom }: SquareNodeProps) {
+function SquareNode({ node, depth, collapsed, toggle, zoom, locked, toggleLock, onNodeRef, drawingMode, onNodeSelect, selectedForConnection }: SquareNodeProps) {
   const hasChildren = node.children.length > 0;
   const colorClass = palette[node.color as keyof typeof palette] || palette.default;
+  const isLocked = locked.has(node.uid);
+  const isSelected = selectedForConnection === node.uid;
   
-  const scale = 1 + (zoom * 0.1);
+  const minWidth = 70 + zoom * 4;
+  const minHeight = 50 + zoom * 3;
+  const fontSize = 10 + zoom * 0.5;
+  const gap = 4 + zoom * 0.3;
   
   return (
-    <div className="flex flex-col items-center relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}>
-      {depth > 0 && <div className="h-8 w-px bg-slate-300" />}
-      <button
-        onClick={() => hasChildren && toggle(node.uid)}
-        className={`min-w-[86px] min-h-[56px] rounded-lg border shadow-sm px-3 py-2 text-[10px] font-bold uppercase tracking-tight flex items-center justify-center gap-1 ${colorClass} transition-all hover:shadow-lg`}
-        title={node.description}
-      >
-        {hasChildren ? collapsed.has(node.uid) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}
-        <span>{node.name}</span>
-      </button>
+    <div className="flex flex-col items-center relative" ref={(el) => onNodeRef(node.uid, el)}>
+      {depth > 0 && <div className="h-8 w-px bg-slate-300" style={{ height: `${8 + gap * 2}px` }} />}
+      <div className="relative group">
+        <button
+          onClick={() => hasChildren && toggle(node.uid)}
+          className={`rounded-lg border shadow-sm px-3 py-2 font-bold uppercase tracking-tight flex items-center justify-center gap-1 transition-all hover:shadow-lg ${colorClass} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}
+          style={{ 
+            minWidth: `${minWidth}px`, 
+            minHeight: `${minHeight}px`,
+            fontSize: `${fontSize}px`,
+            opacity: drawingMode ? 0.8 : 1,
+            cursor: drawingMode ? 'pointer' : 'default'
+          }}
+          title={node.description}
+          onMouseDown={() => drawingMode && onNodeSelect(node.uid)}
+        >
+          {hasChildren ? collapsed.has(node.uid) ? <ChevronRight size={12} /> : <ChevronDown size={12} /> : null}
+          <span>{node.name}</span>
+        </button>
+        
+        {/* Lock Button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleLock(node.uid);
+          }}
+          className={`absolute -top-2 -right-2 w-5 h-5 rounded-full text-xs flex items-center justify-center transition-all ${
+            isLocked 
+              ? 'bg-amber-500 text-white' 
+              : 'bg-slate-200 hover:bg-slate-300 text-slate-600'
+          }`}
+          title={isLocked ? "Unlock node" : "Lock node"}
+        >
+          {isLocked ? '🔒' : '🔓'}
+        </button>
+      </div>
+      
       {hasChildren && !collapsed.has(node.uid) && (
         <div className="flex flex-col items-center">
-          <div className="h-8 w-px bg-slate-300" />
-          <div className="flex gap-5 items-start border-t border-slate-300 pt-0">
+          <div className="h-8 w-px bg-slate-300" style={{ height: `${8 + gap * 2}px` }} />
+          <div className="flex items-start border-t border-slate-300 pt-0" style={{ gap: `${gap + 16}px` }}>
             {node.children.map((child) => (
-              <SquareNode key={child.uid} node={child} depth={depth + 1} collapsed={collapsed} toggle={toggle} zoom={zoom} />
+              <SquareNode 
+                key={child.uid} 
+                node={child} 
+                depth={depth + 1} 
+                collapsed={collapsed} 
+                toggle={toggle} 
+                zoom={zoom}
+                locked={locked}
+                toggleLock={toggleLock}
+                onNodeRef={onNodeRef}
+                drawingMode={drawingMode}
+                onNodeSelect={onNodeSelect}
+                selectedForConnection={selectedForConnection}
+              />
             ))}
           </div>
         </div>
@@ -104,9 +155,23 @@ export default function LifeNodeTogglePrototype() {
   const [collapsed, setCollapsed] = useState(new Set(rawNodes.filter((n: any) => n.parentUid !== null).map((n: any) => n.uid)));
   const [mode, setMode] = useState<"map" | "agenda">("map");
   const [zoom, setZoom] = useState(0);
+  const [locked, setLocked] = useState(new Set<string>());
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [selectedForConnection, setSelectedForConnection] = useState<string | null>(null);
+  const [connections, setConnections] = useState<Array<{ from: string; to: string }>>([]);
+  const nodeRefs = new Map<string, HTMLDivElement>();
+  const svgRef = React.useRef<SVGSVGElement>(null);
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const toggleLock = (id: string) => {
+    setLocked((prev) => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
       return next;
@@ -122,19 +187,47 @@ export default function LifeNodeTogglePrototype() {
   };
 
   const handleZoomIn = () => {
-    setZoom((prev) => Math.min(prev + 1, 10));
+    setZoom((prev) => Math.min(prev + 2, 20));
   };
 
   const handleZoomOut = () => {
-    setZoom((prev) => Math.max(prev - 1, -5));
+    setZoom((prev) => Math.max(prev - 2, -10));
   };
 
   const handleResetZoom = () => {
     setZoom(0);
   };
 
+  const handleNodeSelect = (uid: string) => {
+    if (!selectedForConnection) {
+      setSelectedForConnection(uid);
+    } else if (selectedForConnection === uid) {
+      setSelectedForConnection(null);
+    } else {
+      setConnections((prev) => [...prev, { from: selectedForConnection, to: uid }]);
+      setSelectedForConnection(null);
+    }
+  };
+
+  const deleteConnection = (from: string, to: string) => {
+    setConnections((prev) => prev.filter((c) => !(c.from === from && c.to === to)));
+  };
+
+  const getNodePosition = (uid: string) => {
+    const element = nodeRefs.get(uid);
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const svgRect = svg.getBoundingClientRect();
+    return {
+      x: rect.left - svgRect.left + rect.width / 2,
+      y: rect.top - svgRect.top + rect.height / 2,
+    };
+  };
+
   return (
-    <div className="w-full min-h-screen bg-white text-slate-900 overflow-auto">
+    <div className="w-full min-h-screen bg-white text-slate-900 flex flex-col overflow-hidden">
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-slate-200 p-3 flex flex-wrap items-center gap-2">
         <button onClick={() => setMode("map")} className={`rounded-lg px-3 py-2 text-sm font-semibold border transition-colors ${mode === "map" ? "bg-black text-white" : "bg-white hover:bg-slate-50"}`}>
           <NetworkIcon /> Life Map
@@ -157,17 +250,40 @@ export default function LifeNodeTogglePrototype() {
         
         <div className="border-l border-slate-300 h-8 mx-1" />
         
-        <button onClick={handleZoomOut} disabled={zoom <= -5} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
+        <button onClick={handleZoomOut} disabled={zoom <= -10} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
           <ZoomOutIcon />
         </button>
         
         <button onClick={handleResetZoom} className="rounded-lg px-2 py-2 text-xs border bg-white hover:bg-slate-50 transition-colors font-semibold min-w-[50px]" title="Reset zoom">
-          {Math.round((1 + zoom * 0.1) * 100)}%
+          {Math.round(100 + zoom * 5)}%
         </button>
         
-        <button onClick={handleZoomIn} disabled={zoom >= 10} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
+        <button onClick={handleZoomIn} disabled={zoom >= 20} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
           <ZoomInIcon />
         </button>
+
+        <div className="border-l border-slate-300 h-8 mx-1" />
+
+        <button 
+          onClick={() => {
+            setDrawingMode(!drawingMode);
+            setSelectedForConnection(null);
+          }}
+          className={`rounded-lg px-3 py-2 text-sm border font-medium transition-colors ${
+            drawingMode
+              ? 'bg-blue-500 text-white'
+              : 'bg-white hover:bg-slate-50'
+          }`}
+          title="Draw connections between nodes"
+        >
+          ➜ Draw Arrows
+        </button>
+
+        {connections.length > 0 && (
+          <span className="text-xs text-slate-600 ml-2">
+            {connections.length} connection{connections.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
 
       {mode === "agenda" ? (
@@ -183,17 +299,88 @@ export default function LifeNodeTogglePrototype() {
           </div>
         </div>
       ) : (
-        <div
-          className="min-w-full min-h-[850px] p-12 overflow-auto"
-          style={{
-            backgroundImage: "radial-gradient(#d9e2ec 1px, transparent 1px)",
-            backgroundSize: "14px 14px",
-          }}
-        >
-          <div className="flex gap-16 items-start justify-center">
-            {roots.map((root) => (
-              <SquareNode key={root.uid} node={root} depth={0} collapsed={collapsed} toggle={toggle} zoom={zoom} />
-            ))}
+        <div className="flex-1 overflow-auto relative">
+          <svg
+            ref={svgRef}
+            className="absolute inset-0 w-full h-full pointer-events-none z-0"
+            style={{ background: 'transparent' }}
+          >
+            {connections.map((conn, idx) => {
+              const fromPos = getNodePosition(conn.from);
+              const toPos = getNodePosition(conn.to);
+              if (!fromPos || !toPos) return null;
+
+              return (
+                <g key={idx}>
+                  <line
+                    x1={fromPos.x}
+                    y1={fromPos.y}
+                    x2={toPos.x}
+                    y2={toPos.y}
+                    stroke="#3b82f6"
+                    strokeWidth="2"
+                    markerEnd="url(#arrowhead)"
+                  />
+                  {/* Click area to delete connection */}
+                  <line
+                    x1={fromPos.x}
+                    y1={fromPos.y}
+                    x2={toPos.x}
+                    y2={toPos.y}
+                    stroke="transparent"
+                    strokeWidth="10"
+                    className="cursor-pointer hover:stroke-red-300"
+                    style={{ pointerEvents: 'auto' }}
+                    onClick={() => deleteConnection(conn.from, conn.to)}
+                  />
+                </g>
+              );
+            })}
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="10"
+                markerHeight="10"
+                refX="9"
+                refY="3"
+                orient="auto"
+              >
+                <polygon points="0 0, 10 3, 0 6" fill="#3b82f6" />
+              </marker>
+            </defs>
+          </svg>
+
+          <div
+            className="min-w-max min-h-full p-12 flex items-start justify-center relative z-1"
+            style={{
+              backgroundImage: "radial-gradient(#d9e2ec 1px, transparent 1px)",
+              backgroundSize: "14px 14px",
+            }}
+          >
+            <div className="flex gap-12 items-start">
+              {roots.map((root) => (
+                <SquareNode 
+                  key={root.uid} 
+                  node={root} 
+                  depth={0} 
+                  collapsed={collapsed} 
+                  toggle={toggle} 
+                  zoom={zoom}
+                  locked={locked}
+                  toggleLock={toggleLock}
+                  onNodeRef={(uid, el) => {
+                    if (el) {
+                      nodeRefs.set(uid, el);
+                    } else {
+                      nodeRefs.delete(uid);
+                    }
+                  }}
+                  drawingMode={drawingMode}
+                  onNodeSelect={handleNodeSelect}
+                  selectedForConnection={selectedForConnection}
+                />
+              ))}
+            </div>
           </div>
         </div>
       )}
