@@ -34,6 +34,14 @@ const palette: Record<string, string> = {
   purple: "bg-purple-600 text-white border-purple-600",
   default: "bg-black text-white border-black",
 };
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
+const ZOOM_STEP = 0.1;
+
+const clampZoom = (value: number) => {
+  const rounded = Math.round(value * 100) / 100;
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, rounded));
+};
 
 interface TreeNode {
   uid: string;
@@ -159,14 +167,6 @@ export default function LifeNodeTogglePrototype() {
   const [connections, setConnections] = useState<Array<{ from: string; to: string }>>([]);
   const nodeRefs = new Map<string, HTMLDivElement>();
   const svgRef = React.useRef<SVGSVGElement>(null);
-  const minZoom = 0.5;
-  const maxZoom = 2;
-  const zoomStep = 0.1;
-
-  const clampZoom = (value: number) => {
-    const rounded = Math.round(value * 100) / 100;
-    return Math.min(maxZoom, Math.max(minZoom, rounded));
-  };
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {
@@ -193,11 +193,11 @@ export default function LifeNodeTogglePrototype() {
   };
 
   const handleZoomIn = () => {
-    setZoomScale((prev) => clampZoom(prev + zoomStep));
+    setZoomScale((prev) => clampZoom(prev + ZOOM_STEP));
   };
 
   const handleZoomOut = () => {
-    setZoomScale((prev) => clampZoom(prev - zoomStep));
+    setZoomScale((prev) => clampZoom(prev - ZOOM_STEP));
   };
 
   const handleResetZoom = () => {
@@ -208,7 +208,7 @@ export default function LifeNodeTogglePrototype() {
     if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
-    setZoomScale((prev) => clampZoom(prev + direction * zoomStep));
+    setZoomScale((prev) => clampZoom(prev + direction * ZOOM_STEP));
   };
 
   const handleNodeSelect = (uid: string) => {
@@ -263,7 +263,7 @@ export default function LifeNodeTogglePrototype() {
         
         <div className="border-l border-slate-300 h-8 mx-1" />
         
-        <button onClick={handleZoomOut} disabled={zoomScale <= minZoom} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
+        <button onClick={handleZoomOut} disabled={zoomScale <= MIN_ZOOM} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom out">
           <ZoomOutIcon />
         </button>
         
@@ -271,7 +271,7 @@ export default function LifeNodeTogglePrototype() {
           {Math.round(zoomScale * 100)}%
         </button>
         
-        <button onClick={handleZoomIn} disabled={zoomScale >= maxZoom} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
+        <button onClick={handleZoomIn} disabled={zoomScale >= MAX_ZOOM} className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" title="Zoom in">
           <ZoomInIcon />
         </button>
 
@@ -371,7 +371,7 @@ export default function LifeNodeTogglePrototype() {
               backgroundImage: "radial-gradient(#d9e2ec 1px, transparent 1px)",
               backgroundSize: "14px 14px",
               transform: `scale(${zoomScale})`,
-              transformOrigin: "center",
+              transformOrigin: "top left",
               transition: "transform 0.2s ease",
               willChange: "transform",
             }}
