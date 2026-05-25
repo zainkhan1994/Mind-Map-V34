@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Arrow, Circle, Group, Layer, Line, Rect, Stage, Text } from "react-konva";
+import { Arrow, Circle, Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text } from "react-konva";
 import { rawNodes } from "./data";
+import { preloadLogos, getCachedLogo } from "./logoUtils";
 
 function ChevronDown({ size = 12 }) {
   return <span style={{ fontSize: size, lineHeight: 1 }}>▼</span>;
@@ -35,6 +36,65 @@ const palette: Record<string, { fill: string; stroke: string; text: string }> = 
   purple: { fill: "#9333ea", stroke: "#9333ea", text: "#ffffff" },
   default: { fill: "#111827", stroke: "#111827", text: "#ffffff" },
 };
+
+/**
+ * LogoImage component - displays logo for a node
+ * Handles async image loading and fallback
+ */
+function LogoImage({
+  x,
+  y,
+  width,
+  height,
+  logoUrl,
+  nodeName,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  logoUrl: string;
+  nodeName: string;
+}) {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    // Don't attempt to load if already failed
+    if (failed || !logoUrl) return;
+
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => setImage(img);
+    img.onerror = () => setFailed(true);
+    img.src = logoUrl;
+
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [logoUrl, failed]);
+
+  // If image loaded successfully, render it
+  if (image) {
+    return <KonvaImage x={x} y={y} width={width} height={height} image={image} listening={false} />;
+  }
+
+  // Fallback: render a generic app emoji
+  return (
+    <Text
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      text="📦"
+      fontSize={width * 0.8}
+      align="center"
+      verticalAlign="middle"
+      listening={false}
+    />
+  );
+}
 
 interface TreeNode {
   uid: string;
@@ -125,6 +185,7 @@ export default function LifeNodeTogglePrototype() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [selectedForConnection, setSelectedForConnection] = useState<string | null>(null);
   const [connections, setConnections] = useState<Array<{ from: string; to: string }>>([]);
+  const [showLogos, setShowLogos] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<any>(null);
   const rafRef = useRef<number | null>(null);
@@ -155,6 +216,12 @@ export default function LifeNodeTogglePrototype() {
       }
     };
   }, []);
+
+  // Preload logos for visible nodes (F4: Smart Preloading)
+  useEffect(() => {
+    if (!showLogos) return;
+    // Preload logos will be triggered via a separate memoized computation
+  }, [showLogos]);
 
   const scheduleViewUpdate = useCallback((updater: (prev: ViewState) => ViewState) => {
     targetViewRef.current = updater(targetViewRef.current);
@@ -324,6 +391,17 @@ export default function LifeNodeTogglePrototype() {
     [layoutNodes, viewport],
   );
 
+  // Preload logos for visible file nodes (F4: Smart Preloading)
+  useEffect(() => {
+    if (!showLogos) return;
+    const visibleFileNodeNames = visibleNodes
+      .filter((item) => item.node.type === "file")
+      .map((item) => item.node.name);
+    if (visibleFileNodeNames.length > 0) {
+      preloadLogos(visibleFileNodeNames).catch((err) => console.error("Failed to preload logos:", err));
+    }
+  }, [showLogos, visibleNodes]);
+
   const visibleTreeConnections = useMemo(() => {
     return treeConnections
       .map((link) => {
@@ -412,6 +490,16 @@ export default function LifeNodeTogglePrototype() {
           className="rounded-lg px-3 py-2 text-sm border bg-white hover:bg-slate-50 transition-colors"
         >
           Collapse All
+        </button>
+
+        <button
+          onClick={() => setShowLogos(!showLogos)}
+          className={`rounded-lg px-3 py-2 text-sm border font-medium transition-colors ${
+            showLogos ? "bg-blue-100 text-blue-900" : "bg-white hover:bg-slate-50"
+          }`}
+          title={showLogos ? "Hide logos" : "Show logos"}
+        >
+          📷 {showLogos ? "Hide Logos" : "Show Logos"}
         </button>
 
         <div className="border-l border-slate-300 h-8 mx-1" />
@@ -579,9 +667,12 @@ export default function LifeNodeTogglePrototype() {
                 const isCollapsed = collapsed.has(item.node.uid);
                 const isLocked = locked.has(item.node.uid);
                 const isSelected = selectedForConnection === item.node.uid;
+                const isFileNode = item.node.type === "file";
+                const shouldShowLogo = showLogos && isFileNode && !isCollapsed;
+                const logoUrl = shouldShowLogo ? getCachedLogo(item.node.name) : null;
 
                 return (
-                  <Group
+                   <Group
                     key={item.node.uid}
                     x={item.x}
                     y={item.y}
@@ -619,7 +710,7 @@ export default function LifeNodeTogglePrototype() {
                     <Text
                       text={`${hasChildren ? (isCollapsed ? "▶ " : "▼ ") : ""}${item.node.name}`}
                       width={item.width - 16}
-                      height={item.height - 14}
+                      height={shouldShowLogo ? item.height * 0.6 : item.height - 14}
                       x={8}
                       y={7}
                       fill={nodePalette.text}
@@ -631,6 +722,18 @@ export default function LifeNodeTogglePrototype() {
                       ellipsis
                       listening={false}
                     />
+
+                    {/* Logo display for file nodes (F3: Logo Rendering in Nodes) */}
+                    {shouldShowLogo && logoUrl && (
+                      <LogoImage
+                        x={item.width / 2 - 12}
+                        y={item.height - 20}
+                        width={24}
+                        height={24}
+                        logoUrl={logoUrl}
+                        nodeName={item.node.name}
+                      />
+                    )}
 
                     <Circle
                       x={item.width - 8}
